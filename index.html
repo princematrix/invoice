@@ -875,7 +875,7 @@ XYZ Industries,,,"></textarea>
     function unlock(){
       lockOverlay.classList.add('unlocked');
       appRoot.classList.add('visible');
-      try{ sessionStorage.setItem('invoiceGenUnlocked', 'true'); }catch(e){}
+      try{ localStorage.setItem('invoiceGenUnlocked', 'true'); }catch(e){}
     }
 
     function tryUnlock(){
@@ -899,7 +899,7 @@ XYZ Industries,,,"></textarea>
 
     // Stay unlocked for the rest of this browser tab session
     let alreadyUnlocked = false;
-    try{ alreadyUnlocked = sessionStorage.getItem('invoiceGenUnlocked') === 'true'; }catch(e){}
+    try{ alreadyUnlocked = localStorage.getItem('invoiceGenUnlocked') === 'true'; }catch(e){}
     if(alreadyUnlocked){
       unlock();
     } else {
