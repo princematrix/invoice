@@ -110,6 +110,46 @@
     border-radius:2px;
   }
   select.editable{ cursor:pointer; }
+  .auto-num-btn{
+    font-size:10.5px;
+    padding:2px 6px;
+    border-radius:4px;
+    border:1px solid var(--accent);
+    background:#fff;
+    color:var(--accent);
+    cursor:pointer;
+    vertical-align:middle;
+  }
+  .auto-num-btn:hover{ opacity:0.8; }
+
+  .ac-results{
+    display:none;
+    position:absolute;
+    top:100%;
+    left:0;
+    right:0;
+    background:#fff;
+    border:1px solid var(--accent);
+    border-top:none;
+    max-height:230px;
+    overflow-y:auto;
+    z-index:200;
+    box-shadow:0 6px 14px rgba(0,0,0,0.15);
+    text-align:left;
+  }
+  .ac-results.open{ display:block; }
+  .ac-item{
+    padding:6px 9px;
+    font-size:12.5px;
+    cursor:pointer;
+    border-bottom:1px solid #eee;
+  }
+  .ac-item:last-child{ border-bottom:none; }
+  .ac-item:hover{ background:var(--accent-light); }
+  .ac-item .ac-name{ font-weight:600; color:#222; }
+  .ac-item .ac-meta{ font-size:11px; color:#777; margin-top:1px; }
+  .ac-item.ac-empty{ color:#999; cursor:default; font-style:italic; }
+  .ac-item.ac-empty:hover{ background:none; }
 
   table.items{
     width:100%;
@@ -436,6 +476,9 @@
     #sheet{ border:none; max-width:100%; }
     button.danger{ display:none !important; }
     .row-del{ display:none !important; }
+    .auto-num-btn{ display:none !important; }
+    #customerSearch, #labelCompanySearch{ display:none !important; }
+    .ac-results{ display:none !important; }
     input.editable, select.editable, textarea.editable{
       border:none !important;
       background:transparent !important;
@@ -455,9 +498,9 @@
 
 <div class="toolbar">
   <h1>Invoice Generator</h1>
-  <button class="secondary" id="addRowTop">+ Add Item Row</button>
   <button class="secondary" id="resetBtn">Reset Items</button>
   <button class="secondary" id="newInvoiceBtn">New Invoice</button>
+  <button class="secondary" id="historyBtn">Invoice History</button>
   <button class="secondary" id="manageBtn">Manage Companies</button>
   <button class="secondary" id="labelBtn">Courier Label</button>
   <button id="printBtn">Print / Save as PDF</button>
@@ -527,6 +570,30 @@ XYZ Industries,,,"></textarea>
   </div>
 </div>
 
+<div id="historyOverlay" class="overlay">
+  <div class="modal" style="max-width:840px;">
+    <div class="modal-head">
+      <h2>Invoice History</h2>
+      <button class="secondary" id="closeHistory">Close</button>
+    </div>
+    <div class="modal-section">
+      <div class="hint">Every time you click "New Invoice", the invoice currently on screen is saved here first. Click "View" to reopen it.</div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+        <label for="historyTypeFilter" style="font-size:12.5px;font-weight:600;color:#444;">Filter by type:</label>
+        <select id="historyTypeFilter" class="editable" style="width:auto;max-width:220px;border:1px solid var(--thin);border-radius:4px;padding:4px 8px;background:#fff;">
+          <option value="ALL">All</option>
+          <option value="PROFORMA INVOICE">Proforma Invoice</option>
+          <option value="INVOICE">Invoice</option>
+        </select>
+      </div>
+      <table class="manage-table" id="historyTable">
+        <thead><tr><th>Type</th><th>Number</th><th>Party</th><th>Date</th><th style="text-align:right;">Grand Total</th><th></th></tr></thead>
+        <tbody id="historyTableBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
 <div id="labelOverlay" class="overlay">
   <div class="modal" style="max-width:720px;">
     <div class="modal-head">
@@ -537,20 +604,13 @@ XYZ Industries,,,"></textarea>
     <div class="modal-section">
       <div class="label-form-grid">
         <div class="label-col">
-          <h3>From (Sender)</h3>
-          <div class="form-grid">
-            <label>Company name<input id="fromName" placeholder="Your company name"></label>
-            <label>Phone<input id="fromPhone" placeholder="Optional"></label>
+          <h3>To (Consignee) — shown at top of label</h3>
+          <div class="ac-wrap" style="position:relative;margin-bottom:6px;">
+            <input type="text" id="labelCompanySearch" autocomplete="off" placeholder="Search name / phone / GST / city..." style="width:100%;border:1px solid #ccc;border-radius:5px;padding:6px;font-size:12.5px;font-family:inherit;">
+            <div id="labelCompanySearchResults" class="ac-results"></div>
           </div>
-          <label style="display:flex;flex-direction:column;font-size:12px;font-weight:600;color:#444;gap:4px;">
-            Address
-            <textarea id="fromAddress" rows="2" style="font-family:inherit;font-size:13px;padding:7px 8px;border:1px solid #ccc;border-radius:5px;resize:vertical;" placeholder="Sender address"></textarea>
-          </label>
-        </div>
-        <div class="label-col">
-          <h3>To (Consignee)</h3>
           <div style="display:flex;gap:4px;align-items:center;margin-bottom:8px;">
-            <span style="font-size:12px;font-weight:600;color:#444;">Load from saved party</span>
+            <span style="font-size:12px;font-weight:600;color:#444;">Or choose from full list</span>
             <select class="editable" id="labelCompanySelect" style="flex:1;border:1px solid #ccc;border-radius:5px;padding:6px;">
               <option value="">-- choose saved party --</option>
             </select>
@@ -562,6 +622,17 @@ XYZ Industries,,,"></textarea>
           <label style="display:flex;flex-direction:column;font-size:12px;font-weight:600;color:#444;gap:4px;">
             Address
             <textarea id="toAddress" rows="2" style="font-family:inherit;font-size:13px;padding:7px 8px;border:1px solid #ccc;border-radius:5px;resize:vertical;" placeholder="Consignee address"></textarea>
+          </label>
+        </div>
+        <div class="label-col">
+          <h3>From (Sender) — shown at bottom of label</h3>
+          <div class="form-grid">
+            <label>Company name<input id="fromName" placeholder="Your company name"></label>
+            <label>Phone<input id="fromPhone" placeholder="Optional"></label>
+          </div>
+          <label style="display:flex;flex-direction:column;font-size:12px;font-weight:600;color:#444;gap:4px;">
+            Address
+            <textarea id="fromAddress" rows="2" style="font-family:inherit;font-size:13px;padding:7px 8px;border:1px solid #ccc;border-radius:5px;resize:vertical;" placeholder="Sender address"></textarea>
           </label>
         </div>
       </div>
@@ -591,30 +662,44 @@ XYZ Industries,,,"></textarea>
 
   <img class="header-img" id="headerImg" alt="Company Letterhead">
 
-  <div class="title-bar">PROFORMA INVOICE</div>
+  <div class="title-bar">
+    <select class="editable" id="docType" style="font-weight:bold;font-size:16px;letter-spacing:1px;text-align:center;text-align-last:center;-moz-text-align-last:center;">
+      <option value="PROFORMA INVOICE">PROFORMA INVOICE</option>
+      <option value="INVOICE">INVOICE</option>
+    </select>
+  </div>
 
   <table class="meta">
     <tr>
-      <td class="party-cell" rowspan="3">
-        <div style="display:flex;gap:4px;align-items:center;">
+      <td class="party-cell" rowspan="2">
+        <div class="ac-wrap" style="display:flex;gap:4px;align-items:center;position:relative;">
           <span class="label" style="font-weight:bold;">M/s</span>
-          <select class="editable" id="customerSelect" style="flex:0 0 40%;">
-            <option value="">-- choose saved party --</option>
+          <input type="text" id="customerSearch" class="editable" autocomplete="off" placeholder="Search name / phone / GST / city..." style="flex:1;border:1px solid #ccc;border-radius:4px;padding:3px 5px;font-size:12px;">
+          <div id="customerSearchResults" class="ac-results"></div>
+        </div>
+        <div style="display:flex;gap:4px;align-items:center;margin-top:3px;">
+          <select class="editable" id="customerSelect" style="flex:1;">
+            <option value="">-- or choose from full list --</option>
           </select>
         </div>
         <input class="editable" id="partyName" style="font-weight:bold;margin-top:4px;" placeholder="Party name" value="Om Polymer">
         <textarea class="editable" id="partyAddress" rows="2" style="resize:vertical;margin-top:4px;" placeholder="Party address">E48A sector 23, Sanjay colony Near Punjab rolling mill Chowk Pin 121005</textarea>
       </td>
-      <td class="label">PI No. :</td>
-      <td><input class="editable" id="piNo" value="0041/25-26"></td>
-    </tr>
-    <tr>
-      <td class="label">Challan No. :</td>
-      <td><input class="editable" id="challanNo" value="0041/25-26"></td>
-    </tr>
-    <tr>
       <td class="label">Date :</td>
       <td><input class="editable" type="date" id="invDate"></td>
+    </tr>
+    <tr>
+      <td class="label" id="numberLabel">Proforma Invoice No. :</td>
+      <td style="white-space:nowrap;">
+        <div id="piNoWrap" style="display:flex;align-items:center;gap:4px;">
+          <input class="editable" id="piNo" value="0041/25-26" style="width:72%;">
+          <button type="button" class="auto-num-btn" data-target="piNo" data-key="pi" title="Auto-generate next Proforma Invoice number">⟳ Auto</button>
+        </div>
+        <div id="invoiceNoWrap" style="display:none;align-items:center;gap:4px;">
+          <input class="editable" id="challanNo" value="0041/25-26" style="width:72%;">
+          <button type="button" class="auto-num-btn" data-target="challanNo" data-key="invoice" title="Auto-generate next Invoice number">⟳ Auto</button>
+        </div>
+      </td>
     </tr>
     <tr>
       <td colspan="1"></td>
@@ -740,6 +825,62 @@ function refreshCustomerSelect(){
   if(prev && Number(prev) < getAllCompanies().length) sel.value = prev;
 }
 refreshCustomerSelect();
+
+// ---- Autocomplete search: matches name, phone, GST, or address/city; shows a visible results list ----
+function setupAutocomplete(inputId, resultsId, onPick){
+  const input = document.getElementById(inputId);
+  const results = document.getElementById(resultsId);
+  if(!input || !results) return;
+
+  function render(){
+    const q = input.value.trim().toLowerCase();
+    results.innerHTML = '';
+    if(!q){ results.classList.remove('open'); return; }
+
+    const matches = getAllCompanies().filter(c=>{
+      const hay = [c.name, c.phone, c.gst, c.address].filter(Boolean).join(' ').toLowerCase();
+      return hay.includes(q);
+    }).slice(0, 30);
+
+    if(matches.length === 0){
+      const div = document.createElement('div');
+      div.className = 'ac-item ac-empty';
+      div.textContent = 'No matching company found';
+      results.appendChild(div);
+    } else {
+      matches.forEach(c=>{
+        const div = document.createElement('div');
+        div.className = 'ac-item';
+        const metaParts = [c.phone, c.gst, c.address].filter(Boolean);
+        div.innerHTML = '<div class="ac-name"></div><div class="ac-meta"></div>';
+        div.querySelector('.ac-name').textContent = c.name;
+        div.querySelector('.ac-meta').textContent = metaParts.join('  ·  ');
+        div.addEventListener('mousedown', (e)=>{
+          e.preventDefault(); // keep focus/click working before input's blur fires
+          onPick(c);
+          input.value = '';
+          results.classList.remove('open');
+        });
+        results.appendChild(div);
+      });
+    }
+    results.classList.add('open');
+  }
+
+  input.addEventListener('input', render);
+  input.addEventListener('focus', ()=>{ if(input.value.trim()) render(); });
+  document.addEventListener('click', (e)=>{
+    if(e.target !== input) results.classList.remove('open');
+  });
+}
+
+setupAutocomplete('customerSearch', 'customerSearchResults', (c)=>{
+  document.getElementById('partyName').value = c.name || '';
+  document.getElementById('partyAddress').value = c.address || '';
+  document.getElementById('partyGst').value = c.gst || '';
+  calc();
+  debouncedSaveDraft();
+});
 
 sel.addEventListener('change', ()=>{
   if(sel.value === "") return;
@@ -968,9 +1109,58 @@ document.getElementById('saveCompBtn').addEventListener('click', ()=>{
   msg.className = 'msg ok';
 });
 
-document.getElementById('challanNoLink');
-document.getElementById('piNo').addEventListener('input', ()=>{
-  document.getElementById('challanNo').value = document.getElementById('piNo').value;
+// ---- Auto-generate / manual entry for PI No. and Invoice No. ----
+const NUM_STORAGE_KEY = 'invoiceGeneratorLastNumbers';
+
+function loadLastNumbers(){
+  try{ return JSON.parse(localStorage.getItem(NUM_STORAGE_KEY)) || {}; }
+  catch(e){ return {}; }
+}
+function saveLastNumbers(obj){
+  try{ localStorage.setItem(NUM_STORAGE_KEY, JSON.stringify(obj)); }
+  catch(e){ /* ignore */ }
+}
+// Increments the leading numeric part of a value like "0041/25-26" -> "0042/25-26",
+// preserving zero-padding and any trailing suffix (financial year, etc).
+function computeNextNumber(value){
+  const str = String(value||'').trim();
+  const m = str.match(/^(\d+)(.*)$/);
+  if(!m) return str;
+  const digits = m[1];
+  const suffix = m[2];
+  const nextNum = (parseInt(digits,10)+1);
+  const nextDigits = String(nextNum).padStart(digits.length, '0');
+  return nextDigits + suffix;
+}
+function recordLastNumber(key, value){
+  if(!value) return;
+  const nums = loadLastNumbers();
+  nums[key] = value;
+  saveLastNumbers(nums);
+}
+function autoFillNumber(fieldId, key){
+  const nums = loadLastNumbers();
+  const field = document.getElementById(fieldId);
+  const last = nums[key] || field.value;
+  const next = computeNextNumber(last);
+  field.value = next;
+  recordLastNumber(key, next);
+  debouncedSaveDraft();
+}
+
+document.querySelectorAll('.auto-num-btn').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    autoFillNumber(btn.dataset.target, btn.dataset.key);
+  });
+});
+
+// Any manual typing is remembered as the "last used" number for that series,
+// so the next Auto click (or next new invoice) continues from there.
+document.getElementById('piNo').addEventListener('change', ()=>{
+  recordLastNumber('pi', document.getElementById('piNo').value);
+});
+document.getElementById('challanNo').addEventListener('change', ()=>{
+  recordLastNumber('invoice', document.getElementById('challanNo').value);
 });
 
 const today = new Date();
@@ -1096,7 +1286,6 @@ document.getElementById('transport').addEventListener('input', calc);
 document.getElementById('partyGst').addEventListener('input', calc);
 
 document.getElementById('addRowBtn').addEventListener('click', ()=>addRow());
-document.getElementById('addRowTop').addEventListener('click', ()=>addRow());
 document.getElementById('resetBtn').addEventListener('click', ()=>{
   itemsBody.innerHTML='';
   rowCount=0;
@@ -1111,6 +1300,11 @@ document.getElementById('printBtn').addEventListener('click', ()=>window.print()
 const SENDER_STORAGE_KEY = 'invoiceGeneratorSender';
 const labelOverlay = document.getElementById('labelOverlay');
 const labelSel = document.getElementById('labelCompanySelect');
+setupAutocomplete('labelCompanySearch', 'labelCompanySearchResults', (c)=>{
+  document.getElementById('toName').value = c.name || '';
+  document.getElementById('toAddress').value = c.address || '';
+  document.getElementById('toPhone').value = c.phone || '';
+});
 
 function loadSender(){
   try{
@@ -1147,6 +1341,8 @@ labelSel.addEventListener('change', ()=>{
 
 document.getElementById('labelBtn').addEventListener('click', ()=>{
   refreshLabelCompanySelect();
+  const labelSearchEl = document.getElementById('labelCompanySearch');
+  if(labelSearchEl) labelSearchEl.value = '';
 
   const sender = loadSender();
   if(sender){
@@ -1217,16 +1413,16 @@ function buildLabelHtml(){
       </div>
     </div>
     <div class="cl-block">
-      <div class="cl-label">From</div>
-      <div class="cl-name">${escapeHtml(from.name)}</div>
-      <div class="cl-addr">${escapeHtml(from.address)}</div>
-      ${from.phone ? '<div class="cl-sub">Ph: '+escapeHtml(from.phone)+'</div>' : ''}
-    </div>
-    <div class="cl-block">
       <div class="cl-label">To (Consignee)</div>
       <div class="cl-name">${escapeHtml(to.name)}</div>
       <div class="cl-addr">${escapeHtml(to.address)}</div>
       ${to.phone ? '<div class="cl-sub">Ph: '+escapeHtml(to.phone)+'</div>' : ''}
+    </div>
+    <div class="cl-block">
+      <div class="cl-label">From</div>
+      <div class="cl-name">${escapeHtml(from.name)}</div>
+      <div class="cl-addr">${escapeHtml(from.address)}</div>
+      ${from.phone ? '<div class="cl-sub">Ph: '+escapeHtml(from.phone)+'</div>' : ''}
     </div>
     <div class="cl-grid">
       <div class="cl-cell"><div class="cl-label">Ref / PI No.</div><div class="cl-val">${escapeHtml(refNo)||'-'}</div></div>
@@ -1286,6 +1482,7 @@ function collectDraft(){
     challanNo: document.getElementById('challanNo').value,
     invDate: document.getElementById('invDate').value,
     transport: document.getElementById('transport').value,
+    docType: document.getElementById('docType').value,
     items: Array.from(itemsBody.querySelectorAll('tr')).map(tr=>({
       desc: tr.querySelector('.desc-input') ? tr.querySelector('.desc-input').value : '',
       hsn: tr.querySelector('.hsn-input') ? tr.querySelector('.hsn-input').value : '',
@@ -1339,6 +1536,7 @@ function restoreDraft(draft){
   if(draft.challanNo !== undefined) document.getElementById('challanNo').value = draft.challanNo;
   if(draft.invDate) document.getElementById('invDate').value = draft.invDate;
   if(draft.transport !== undefined) document.getElementById('transport').value = draft.transport;
+  if(draft.docType) document.getElementById('docType').value = draft.docType;
 
   itemsBody.innerHTML = '';
   rowCount = 0;
@@ -1362,24 +1560,219 @@ document.getElementById('sheet').addEventListener('change', debouncedSaveDraft);
 // so trigger a save explicitly there too.
 sel.addEventListener('change', debouncedSaveDraft);
 
-document.getElementById('newInvoiceBtn').addEventListener('click', ()=>{
-  if(!confirm('Start a new invoice? This clears the currently saved draft (party details, items, dates). Your saved companies list is not affected.')){
+// ---- Invoice History: every "New Invoice" click archives the current invoice ----
+const HISTORY_KEY = 'invoiceGeneratorHistory';
+
+function loadHistory(){
+  try{ return JSON.parse(localStorage.getItem(HISTORY_KEY)) || []; }
+  catch(e){ return []; }
+}
+function saveHistory(list){
+  try{ localStorage.setItem(HISTORY_KEY, JSON.stringify(list)); }
+  catch(e){ /* storage unavailable, ignore */ }
+}
+
+function snapshotCurrentInvoice(){
+  return {
+    docType: document.getElementById('docType').value,
+    partyName: document.getElementById('partyName').value,
+    partyAddress: document.getElementById('partyAddress').value,
+    partyGst: document.getElementById('partyGst').value,
+    piNo: document.getElementById('piNo').value,
+    challanNo: document.getElementById('challanNo').value,
+    invDate: document.getElementById('invDate').value,
+    transport: document.getElementById('transport').value,
+    items: Array.from(itemsBody.querySelectorAll('tr')).map(tr=>({
+      desc: tr.querySelector('.desc-input') ? tr.querySelector('.desc-input').value : '',
+      hsn: tr.querySelector('.hsn-input') ? tr.querySelector('.hsn-input').value : '',
+      qty: tr.querySelector('.qty-input') ? tr.querySelector('.qty-input').value : '',
+      rate: tr.querySelector('.rate-input') ? tr.querySelector('.rate-input').value : ''
+    })),
+    savedAt: Date.now()
+  };
+}
+
+// Standalone grand-total calc for a saved snapshot (mirrors calc(), doesn't touch the live DOM).
+// CGST+SGST (9%+9%) and IGST (18%) both total 18%, so the grand total math is the same either way.
+function computeSnapshotGrandTotal(snap){
+  let total = 0;
+  (snap.items||[]).forEach(it=>{
+    total += evalQty(it.qty) * (parseFloat(it.rate) || 0);
+  });
+  const transport = parseFloat(snap.transport) || 0;
+  const subtotal = total + transport;
+  const grand = Math.round(subtotal + subtotal * 0.18);
+  return grand;
+}
+
+function addToHistory(snapshot){
+  // Don't bother archiving a totally blank invoice (e.g. very first launch).
+  const hasContent = (snapshot.partyName && snapshot.partyName.trim()) ||
+    (snapshot.items||[]).some(it=>it.desc && it.desc.trim());
+  if(!hasContent) return;
+  const history = loadHistory();
+  history.unshift(snapshot); // newest first
+  saveHistory(history);
+}
+
+function renderHistoryTable(){
+  const body = document.getElementById('historyTableBody');
+  body.innerHTML = '';
+  const history = loadHistory();
+  const filterEl = document.getElementById('historyTypeFilter');
+  const filterVal = filterEl ? filterEl.value : 'ALL';
+
+  if(history.length === 0){
+    const tr = document.createElement('tr');
+    tr.innerHTML = '<td colspan="6" style="text-align:center;color:#888;">No saved invoices yet. They\'ll appear here after you click "New Invoice".</td>';
+    body.appendChild(tr);
     return;
   }
+
+  // Apply the type filter (All / Proforma Invoice / Invoice), keeping original history indices
+  // so View/Remove still act on the correct saved entry.
+  const filtered = history
+    .map((snap, idx)=>({snap, idx}))
+    .filter(({snap})=> filterVal === 'ALL' || (snap.docType || 'PROFORMA INVOICE') === filterVal);
+
+  if(filtered.length === 0){
+    const tr = document.createElement('tr');
+    tr.innerHTML = '<td colspan="6" style="text-align:center;color:#888;">No saved invoices match this filter.</td>';
+    body.appendChild(tr);
+    return;
+  }
+
+  filtered.forEach(({snap, idx})=>{
+    const tr = document.createElement('tr');
+    const grand = computeSnapshotGrandTotal(snap);
+    const dateDisplay = snap.invDate ? new Date(snap.invDate).toLocaleDateString('en-GB') : '-';
+    const isInvoice = snap.docType === 'INVOICE';
+    const numberDisplay = (isInvoice ? snap.challanNo : snap.piNo) || '-';
+    const typeDisplay = isInvoice ? 'Invoice' : 'Proforma Invoice';
+
+    const tdType = document.createElement('td'); tdType.textContent = typeDisplay;
+    const tdNum = document.createElement('td'); tdNum.textContent = numberDisplay;
+    const tdParty = document.createElement('td'); tdParty.textContent = snap.partyName || '-';
+    const tdDate = document.createElement('td'); tdDate.textContent = dateDisplay;
+    const tdTotal = document.createElement('td'); tdTotal.style.textAlign = 'right'; tdTotal.textContent = grand.toFixed(2);
+    const tdActions = document.createElement('td'); tdActions.style.whiteSpace = 'nowrap';
+
+    const viewBtn = document.createElement('button');
+    viewBtn.className = 'secondary';
+    viewBtn.textContent = 'View';
+    viewBtn.style.marginRight = '4px';
+    viewBtn.addEventListener('click', ()=>{
+      loadHistoryInvoice(snap);
+      historyOverlay.classList.remove('open');
+    });
+
+    const delBtn = document.createElement('button');
+    delBtn.className = 'danger';
+    delBtn.textContent = 'Remove';
+    delBtn.addEventListener('click', ()=>{
+      if(!confirm('Remove this saved invoice from history? This cannot be undone.')) return;
+      const list = loadHistory();
+      list.splice(idx, 1);
+      saveHistory(list);
+      renderHistoryTable();
+    });
+
+    tdActions.appendChild(viewBtn);
+    tdActions.appendChild(delBtn);
+    tr.append(tdType, tdNum, tdParty, tdDate, tdTotal, tdActions);
+    body.appendChild(tr);
+  });
+}
+
+function loadHistoryInvoice(snap){
+  if(!snap) return;
+  if(!confirm('Open this saved invoice? Anything currently on screen that hasn\'t been saved will be replaced (click "New Invoice" first if you want to keep it).')){
+    return;
+  }
+  restoringDraft = true;
+  document.getElementById('docType').value = snap.docType || 'PROFORMA INVOICE';
+  document.getElementById('partyName').value = snap.partyName || '';
+  document.getElementById('partyAddress').value = snap.partyAddress || '';
+  document.getElementById('partyGst').value = snap.partyGst || '';
+  document.getElementById('piNo').value = snap.piNo || '';
+  document.getElementById('challanNo').value = snap.challanNo || '';
+  document.getElementById('invDate').value = snap.invDate || new Date().toISOString().slice(0,10);
+  document.getElementById('transport').value = snap.transport || '';
+  updateNumberRowsVisibility();
+
+  itemsBody.innerHTML = '';
+  rowCount = 0;
+  if(snap.items && snap.items.length){
+    snap.items.forEach(it=>addRow(it));
+  } else {
+    addRow();
+  }
+  calc();
+  restoringDraft = false;
+  debouncedSaveDraft();
+  flashAutosaveStatus('Loaded saved invoice from ' + new Date(snap.savedAt).toLocaleString());
+}
+
+const historyOverlay = document.getElementById('historyOverlay');
+document.getElementById('historyBtn').addEventListener('click', ()=>{
+  renderHistoryTable();
+  historyOverlay.classList.add('open');
+});
+const historyTypeFilterEl = document.getElementById('historyTypeFilter');
+if(historyTypeFilterEl){
+  historyTypeFilterEl.addEventListener('change', renderHistoryTable);
+}
+document.getElementById('closeHistory').addEventListener('click', ()=>{
+  historyOverlay.classList.remove('open');
+});
+historyOverlay.addEventListener('click', (e)=>{
+  if(e.target === historyOverlay) historyOverlay.classList.remove('open');
+});
+
+document.getElementById('newInvoiceBtn').addEventListener('click', ()=>{
+  if(!confirm('Start a new invoice? The current invoice will be saved to Invoice History first, then cleared here. Your saved companies list is not affected.')){
+    return;
+  }
+  addToHistory(snapshotCurrentInvoice());
   clearDraft();
   document.getElementById('partyName').value = '';
   document.getElementById('partyAddress').value = '';
   document.getElementById('partyGst').value = '';
-  document.getElementById('piNo').value = '';
-  document.getElementById('challanNo').value = '';
+  // Auto-advance both number series by +1 for the next invoice (still editable manually after).
+  autoFillNumber('piNo', 'pi');
+  autoFillNumber('challanNo', 'invoice');
   document.getElementById('transport').value = '';
   document.getElementById('invDate').value = new Date().toISOString().slice(0,10);
   sel.value = '';
+  const customerSearchEl = document.getElementById('customerSearch');
+  if(customerSearchEl) customerSearchEl.value = '';
   itemsBody.innerHTML = '';
   rowCount = 0;
   addRow();
   calc();
-  flashAutosaveStatus('Started a new invoice');
+  flashAutosaveStatus('Saved to history & started a new invoice — PI & Invoice numbers auto-advanced');
+});
+
+// ---- Show only the relevant number field (Proforma Invoice No. vs Invoice No.) based on document type ----
+// Both inputs live in the same table row so the box border/corner always lines up correctly.
+function updateNumberRowsVisibility(){
+  const docType = document.getElementById('docType').value;
+  const piWrap = document.getElementById('piNoWrap');
+  const invWrap = document.getElementById('invoiceNoWrap');
+  const label = document.getElementById('numberLabel');
+  if(docType === 'INVOICE'){
+    piWrap.style.display = 'none';
+    invWrap.style.display = 'flex';
+    label.textContent = 'Invoice No. :';
+  } else {
+    piWrap.style.display = 'flex';
+    invWrap.style.display = 'none';
+    label.textContent = 'Proforma Invoice No. :';
+  }
+}
+document.getElementById('docType').addEventListener('change', ()=>{
+  updateNumberRowsVisibility();
+  debouncedSaveDraft();
 });
 
 const existingDraft = loadDraft();
@@ -1390,6 +1783,7 @@ if(existingDraft){
   addRow({desc:'Testing Pin P100-J1', hsn:'7317', qty:'15*2', rate:'27'});
   calc();
 }
+updateNumberRowsVisibility();
 </script>
 
 </body>
