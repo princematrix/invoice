@@ -587,6 +587,7 @@
   <button class="secondary" id="historyBtn">Invoice History</button>
   <button class="secondary" id="manageBtn">Manage Companies</button>
   <button class="secondary" id="labelBtn">Courier Label</button>
+  <button class="secondary" id="backupBtn">Backup Data</button>
   <button id="printBtn">Print / Save as PDF</button>
   <span id="autosaveStatus" style="font-size:11px;color:#888;font-style:italic;width:100%;text-align:right;"></span>
 </div>
@@ -674,6 +675,32 @@ XYZ Industries,,,"></textarea>
         <thead><tr><th>Type</th><th>Number</th><th>Party</th><th>Date</th><th style="text-align:right;">Grand Total</th><th></th></tr></thead>
         <tbody id="historyTableBody"></tbody>
       </table>
+    </div>
+  </div>
+</div>
+
+<div id="backupOverlay" class="overlay">
+  <div class="modal" style="max-width:600px;">
+    <div class="modal-head">
+      <h2>Backup Data</h2>
+      <button class="secondary" id="closeBackup">Close</button>
+    </div>
+    <div class="modal-section">
+      <h3>Export everything to a file</h3>
+      <div class="hint">Saves all your saved companies, sender details, invoice history, current draft, and PI/Invoice numbers into one backup file. Keep this file safe — you can use it to restore your data on this browser or any other device/browser.</div>
+      <div class="io-row">
+        <button id="exportBackupBtn">Download Backup File</button>
+      </div>
+      <div id="exportBackupMsg" class="msg"></div>
+    </div>
+    <div class="modal-section">
+      <h3>Restore from a backup file</h3>
+      <div class="hint">Choose a backup file previously downloaded from this app. This will replace all data currently stored in this browser (companies, history, draft, sender details, numbers).</div>
+      <div class="io-row">
+        <label class="file-label">Choose backup file<input type="file" id="backupFileInput" accept=".json,application/json"></label>
+        <span id="backupFileName" class="hint" style="margin:0;"></span>
+      </div>
+      <div id="importBackupMsg" class="msg"></div>
     </div>
   </div>
 </div>
@@ -908,7 +935,54 @@ XYZ Industries,,,"></textarea>
   })();
 </script>
 
+<!-- Firebase (Realtime Database) -->
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-database-compat.js"></script>
 <script>
+  const firebaseConfig = {
+    apiKey: "AIzaSyBWnL33l9RDaE_xnzj0S_xK3NCRGyK4hjY",
+    authDomain: "data-basefor-hosting.firebaseapp.com",
+    databaseURL: "https://data-basefor-hosting-default-rtdb.firebaseio.com",
+    projectId: "data-basefor-hosting",
+    storageBucket: "data-basefor-hosting.firebasestorage.app",
+    messagingSenderId: "788666588797",
+    appId: "1:788666588797:web:40c621901b5d5673a11b14",
+    measurementId: "G-3ETZV6NCKM"
+  };
+  firebase.initializeApp(firebaseConfig);
+  const fbDb = firebase.database();
+  const FB_ROOT = 'invoiceGeneratorData';
+
+  // In-memory cache kept in sync with Firebase so the rest of the app can
+  // read/write "synchronously" the same way it used to with localStorage.
+  window.fbCache = {};
+
+  // Resolves once the initial data has been pulled down from Firebase.
+  window.fbDataReady = fbDb.ref(FB_ROOT).once('value')
+    .then(snap => { window.fbCache = snap.val() || {}; })
+    .catch(err => {
+      console.error('Firebase initial load failed:', err);
+      window.fbCache = {};
+    });
+
+  function fbGetItem(key){
+    return Object.prototype.hasOwnProperty.call(window.fbCache, key) ? window.fbCache[key] : null;
+  }
+  function fbSetItem(key, value){
+    window.fbCache[key] = value;
+    fbDb.ref(FB_ROOT + '/' + key).set(value)
+      .catch(err => console.error('Firebase save failed for', key, err));
+  }
+  function fbRemoveItem(key){
+    delete window.fbCache[key];
+    fbDb.ref(FB_ROOT + '/' + key).remove()
+      .catch(err => console.error('Firebase remove failed for', key, err));
+  }
+</script>
+
+<script>
+(async function(){
+await window.fbDataReady;
 const BUILTIN_CUSTOMERS = [
   {name:"PERT INFO CONSULTING PRIVATE LIMITED", address:"Plot No:4A & B, EC Complex.Talluri Theatres Line Near Kushaiguda Registration Office,Kushaiguda Industrial Area,, Secunderabad, TS (36) 500062 , IN", phone:"", gst:"36AAHCP8653J1ZV", builtin:true},
   {name:"Fabtech Technologies International limited", address:"13/75, LBS Lane, near Old Post Office, Andhra Pradesh -400045", phone:"9878784541", gst:"29AZZPK0935E1Z3", builtin:true},
@@ -927,12 +1001,12 @@ const STORAGE_KEY = 'invoiceGeneratorCustomCompanies';
 
 function loadCustomCompanies(){
   try{
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = fbGetItem(STORAGE_KEY);
     return raw ? JSON.parse(raw) : [];
   }catch(e){ return []; }
 }
 function saveCustomCompanies(list){
-  try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(list)); }
+  try{ fbSetItem(STORAGE_KEY, JSON.stringify(list)); }
   catch(e){ /* storage unavailable, ignore */ }
 }
 
@@ -1246,11 +1320,11 @@ document.getElementById('saveCompBtn').addEventListener('click', ()=>{
 const NUM_STORAGE_KEY = 'invoiceGeneratorLastNumbers';
 
 function loadLastNumbers(){
-  try{ return JSON.parse(localStorage.getItem(NUM_STORAGE_KEY)) || {}; }
+  try{ return JSON.parse(fbGetItem(NUM_STORAGE_KEY)) || {}; }
   catch(e){ return {}; }
 }
 function saveLastNumbers(obj){
-  try{ localStorage.setItem(NUM_STORAGE_KEY, JSON.stringify(obj)); }
+  try{ fbSetItem(NUM_STORAGE_KEY, JSON.stringify(obj)); }
   catch(e){ /* ignore */ }
 }
 // Increments the leading numeric part of a value like "0041/25-26" -> "0042/25-26",
@@ -1441,13 +1515,13 @@ setupAutocomplete('labelCompanySearch', 'labelCompanySearchResults', (c)=>{
 
 function loadSender(){
   try{
-    const raw = localStorage.getItem(SENDER_STORAGE_KEY);
+    const raw = fbGetItem(SENDER_STORAGE_KEY);
     return raw ? JSON.parse(raw) : null;
   }catch(e){ return null; }
 }
 function saveSender(){
   try{
-    localStorage.setItem(SENDER_STORAGE_KEY, JSON.stringify({
+    fbSetItem(SENDER_STORAGE_KEY, JSON.stringify({
       name: document.getElementById('fromName').value,
       address: document.getElementById('fromAddress').value,
       phone: document.getElementById('fromPhone').value
@@ -1628,7 +1702,7 @@ function collectDraft(){
 
 function saveDraftNow(){
   try{
-    localStorage.setItem(DRAFT_KEY, JSON.stringify(collectDraft()));
+    fbSetItem(DRAFT_KEY, JSON.stringify(collectDraft()));
     flashAutosaveStatus('All changes saved · ' + new Date().toLocaleTimeString());
   }catch(e){
     flashAutosaveStatus('Autosave unavailable (storage full or disabled)');
@@ -1651,13 +1725,13 @@ function flashAutosaveStatus(text){
 
 function loadDraft(){
   try{
-    const raw = localStorage.getItem(DRAFT_KEY);
+    const raw = fbGetItem(DRAFT_KEY);
     return raw ? JSON.parse(raw) : null;
   }catch(e){ return null; }
 }
 
 function clearDraft(){
-  try{ localStorage.removeItem(DRAFT_KEY); }catch(e){ /* ignore */ }
+  try{ fbRemoveItem(DRAFT_KEY); }catch(e){ /* ignore */ }
 }
 
 function restoreDraft(draft){
@@ -1697,11 +1771,11 @@ sel.addEventListener('change', debouncedSaveDraft);
 const HISTORY_KEY = 'invoiceGeneratorHistory';
 
 function loadHistory(){
-  try{ return JSON.parse(localStorage.getItem(HISTORY_KEY)) || []; }
+  try{ return JSON.parse(fbGetItem(HISTORY_KEY)) || []; }
   catch(e){ return []; }
 }
 function saveHistory(list){
-  try{ localStorage.setItem(HISTORY_KEY, JSON.stringify(list)); }
+  try{ fbSetItem(HISTORY_KEY, JSON.stringify(list)); }
   catch(e){ /* storage unavailable, ignore */ }
 }
 
@@ -1908,6 +1982,96 @@ document.getElementById('docType').addEventListener('change', ()=>{
   debouncedSaveDraft();
 });
 
+// ---- Full Data Backup / Restore (companies, sender, history, draft, numbers) ----
+const BACKUP_KEYS = [STORAGE_KEY, SENDER_STORAGE_KEY, HISTORY_KEY, DRAFT_KEY, NUM_STORAGE_KEY];
+
+const backupOverlay = document.getElementById('backupOverlay');
+document.getElementById('backupBtn').addEventListener('click', ()=>{
+  document.getElementById('exportBackupMsg').textContent = '';
+  document.getElementById('importBackupMsg').textContent = '';
+  document.getElementById('backupFileName').textContent = '';
+  backupOverlay.classList.add('open');
+});
+document.getElementById('closeBackup').addEventListener('click', ()=>{
+  backupOverlay.classList.remove('open');
+});
+backupOverlay.addEventListener('click', (e)=>{
+  if(e.target === backupOverlay) backupOverlay.classList.remove('open');
+});
+
+document.getElementById('exportBackupBtn').addEventListener('click', ()=>{
+  const data = {};
+  BACKUP_KEYS.forEach(key=>{
+    const raw = fbGetItem(key);
+    if(raw !== null) data[key] = raw;
+  });
+  const payload = {
+    app: 'invoiceGenerator',
+    exportedAt: new Date().toISOString(),
+    data
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  const stamp = new Date().toISOString().slice(0,10);
+  a.download = `invoice-generator-backup-${stamp}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  const msg = document.getElementById('exportBackupMsg');
+  msg.textContent = 'Backup file downloaded.';
+  msg.className = 'msg ok';
+});
+
+document.getElementById('backupFileInput').addEventListener('change', (e)=>{
+  const file = e.target.files[0];
+  const nameEl = document.getElementById('backupFileName');
+  const msg = document.getElementById('importBackupMsg');
+  msg.textContent = '';
+  msg.className = 'msg';
+  if(!file) return;
+  nameEl.textContent = file.name;
+
+  if(!confirm('Restore from this backup? This will overwrite all companies, history, sender details, current draft, and numbers currently saved in this browser. This cannot be undone.')){
+    e.target.value = '';
+    nameEl.textContent = '';
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = (ev)=>{
+    let parsed;
+    try{
+      parsed = JSON.parse(ev.target.result);
+    }catch(err){
+      msg.textContent = 'That file is not a valid backup (could not parse JSON).';
+      msg.className = 'msg err';
+      return;
+    }
+    const data = parsed && parsed.data ? parsed.data : null;
+    if(!data || typeof data !== 'object'){
+      msg.textContent = 'That file does not look like a valid Invoice Generator backup.';
+      msg.className = 'msg err';
+      return;
+    }
+    BACKUP_KEYS.forEach(key=>{
+      if(Object.prototype.hasOwnProperty.call(data, key)){
+        try{ fbSetItem(key, data[key]); }catch(err){ /* ignore */ }
+      }
+    });
+    msg.textContent = 'Backup restored. Reloading...';
+    msg.className = 'msg ok';
+    setTimeout(()=>{ location.reload(); }, 900);
+  };
+  reader.onerror = ()=>{
+    msg.textContent = 'Could not read that file.';
+    msg.className = 'msg err';
+  };
+  reader.readAsText(file);
+});
+
 const existingDraft = loadDraft();
 if(existingDraft){
   restoreDraft(existingDraft);
@@ -1917,6 +2081,8 @@ if(existingDraft){
   calc();
 }
 updateNumberRowsVisibility();
+
+})(); // end async app init
 </script>
 
 </body>
